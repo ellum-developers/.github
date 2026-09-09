@@ -1,0 +1,53 @@
+# Reusable supply-chain guard for every Ellum AI repository.
+#
+# Callers add a four-line workflow (see workflow-templates/supply-chain-guard.yml)
+# so the detection logic lives in exactly one place and updates reach every repo
+# at once.
+#
+#   jobs:
+#     guard:
+#       uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+
+name: Supply-chain guard (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Ref to scan. Empty means whatever triggered the caller.'
+        type: string
+        required: false
+        default: ''
+      guard-ref:
+        description: 'Ref of ellum-developers/.github to take the scanner from.'
+        type: string
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Dropper / EtherHiding scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the calling repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # Kept in its own directory so the scanner never scans itself, and so a
+      # repo cannot silently weaken the rules it is checked against.
+      - name: Check out the scanner
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: ellum-developers/.github
+          ref: ${{ inputs.guard-ref }}
+          path: .supply-chain-guard
+          persist-credentials: false
+
+      - name: Scan the working tree
+        run: node .supply-chain-guard/scripts/scan-supply-chain.mjs "$GITHUB_WORKSPACE"

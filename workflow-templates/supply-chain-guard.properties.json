@@ -1,0 +1,6 @@
+{
+  "name": "Supply-chain guard",
+  "description": "Blocks the EtherHiding dropper family: blockchain-C2 payloads hidden behind tab padding in build configs, and executable code masquerading as fonts or images.",
+  "iconName": "octicon shield-lock",
+  "categories": ["Security", "Continuous integration"]
+}

@@ -1,0 +1,21 @@
+name: Supply-chain guard
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  schedule:
+    # Daily, so a payload committed to a quiet repo still surfaces within a day.
+    - cron: '19 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
