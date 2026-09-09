@@ -2,7 +2,7 @@ name: Supply-chain guard
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev, staging]
   pull_request:
   schedule:
     # Daily, so a payload committed to a quiet repo still surfaces within a day.

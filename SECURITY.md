@@ -19,7 +19,7 @@ high. To add it to a new repository:
 name: Supply-chain guard
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev, staging]
   pull_request:
   schedule:
     - cron: '19 6 * * *'
