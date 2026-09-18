@@ -94,18 +94,40 @@ const findings = [];
 const add = (severity, rule, file, detail) =>
   findings.push({ severity, rule, file, detail });
 
+/*
+ * Coverage warnings are not findings. They record the places the scan could not
+ * see, so a green result is never read as "every tracked file was checked".
+ */
+const coverage = [];
+const note = (rule, detail) => coverage.push({ rule, detail });
+/* Error text on one line: coverage warnings land in a markdown summary list. */
+const oneLine = (err, fallback) =>
+  String((err && err.message) || fallback || err).replace(/\s+/g, ' ').trim().slice(0, 300);
+
 /* ── file discovery: prefer git, fall back to a walk ─────────────────────── */
 function listFiles() {
   try {
     const out = execFileSync('git', ['-C', ROOT, 'ls-files', '-z'], {
       maxBuffer: 64 * 1024 * 1024,
     });
-    return out.toString('utf8').split('\0').filter(Boolean);
-  } catch {
+    return {
+      files: out.toString('utf8').split('\0').filter(Boolean),
+      source: 'git ls-files (tracked files)',
+    };
+  } catch (err) {
+    note('file-list-fallback',
+      `git ls-files failed (${oneLine(err, 'unknown error')}); ` +
+      'listing files with a directory walk instead. The walk includes untracked ' +
+      "files and skips hidden directories, so the checked set can differ from the " +
+      "repository's tracked files.");
     const acc = [];
     (function walk(dir) {
       let entries;
-      try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      try { entries = readdirSync(dir, { withFileTypes: true }); } catch (err) {
+        note('walk-dir-unreadable',
+          `${relative(ROOT, dir) || '.'} (${err && err.code ? err.code : err})`);
+        return;
+      }
       for (const e of entries) {
         if (e.name.startsWith('.') && e.name !== '.github') continue;
         if (SKIP_DIRS.has(e.name)) continue;
@@ -114,7 +136,7 @@ function listFiles() {
         else if (e.isFile()) acc.push(relative(ROOT, full));
       }
     })(ROOT);
-    return acc;
+    return { files: acc, source: 'directory walk (git ls-files failed)' };
   }
 }
 
@@ -144,7 +166,10 @@ function scanFile(rel) {
   const abs = join(ROOT, rel);
   if (resolve(abs) === SELF) return;
   let st;
-  try { st = statSync(abs); } catch { return; }
+  try { st = statSync(abs); } catch (err) {
+    note('file-stat-failed', `${rel} (${err && err.code ? err.code : err})`);
+    return;
+  }
   if (!st.isFile() || st.size === 0 || st.size > MAX_BYTES) return;
 
   const ext = extname(rel).toLowerCase();
@@ -153,7 +178,10 @@ function scanFile(rel) {
   if (!isAsset && !isText && basename(rel) !== 'package.json') return;
 
   let buf;
-  try { buf = readFileSync(abs); } catch { return; }
+  try { buf = readFileSync(abs); } catch (err) {
+    note('file-read-failed', `${rel} (${err && err.code ? err.code : err})`);
+    return;
+  }
 
   /* R5 — an "asset" that is really source code */
   if (isAsset) {
@@ -256,7 +284,12 @@ function scanFile(rel) {
   /* R9 — install lifecycle scripts that fetch or eval */
   if (basename(rel) === 'package.json') {
     let pkg;
-    try { pkg = JSON.parse(content); } catch { return; }
+    try { pkg = JSON.parse(content); } catch (err) {
+      note('package-json-unparsed',
+        `${rel} (${oneLine(err, 'invalid JSON')}) — ` +
+        'install hooks were not checked');
+      return;
+    }
     for (const hook of ['preinstall', 'install', 'postinstall', 'prepare']) {
       const cmd = pkg?.scripts?.[hook];
       if (typeof cmd !== 'string') continue;
@@ -269,7 +302,7 @@ function scanFile(rel) {
 }
 
 /* ── run ─────────────────────────────────────────────────────────────────── */
-const files = listFiles();
+const { files, source } = listFiles();
 for (const f of files) scanFile(f);
 
 const order = { critical: 0, high: 1, medium: 2 };
@@ -280,7 +313,8 @@ const blocking = (counts.critical || 0) + (counts.high || 0);
 
 const icon = { critical: '🚨', high: '⚠️ ', medium: 'ℹ️ ' };
 if (findings.length === 0) {
-  console.log(`✅ supply-chain scan clean — ${files.length} tracked files checked`);
+  console.log(`✅ supply-chain scan clean — ${files.length} files checked ` +
+    `(list from ${source})`);
 } else {
   console.log(`\nSupply-chain scan — ${files.length} files checked, ${findings.length} finding(s)\n`);
   for (const f of findings) {
@@ -290,10 +324,18 @@ if (findings.length === 0) {
   }
 }
 
+if (coverage.length) {
+  console.log(`⚠️  scan coverage — ${coverage.length} warning(s)\n`);
+  for (const c of coverage) {
+    console.log(`   [coverage] ${c.rule}`);
+    console.log(`   ${c.detail}\n`);
+  }
+}
+
 if (process.env.GITHUB_STEP_SUMMARY) {
   const lines = [];
   lines.push(findings.length === 0
-    ? `## ✅ Supply-chain scan clean\n\n${files.length} tracked files checked.`
+    ? `## ✅ Supply-chain scan clean\n\n${files.length} files checked (list from ${source}).`
     : `## ${blocking ? '🚨' : 'ℹ️'} Supply-chain scan — ${findings.length} finding(s)\n`);
   if (findings.length) {
     lines.push('| Severity | Rule | File | Detail |');
@@ -305,6 +347,10 @@ if (process.env.GITHUB_STEP_SUMMARY) {
       lines.push('\n**Do not merge.** Rotate any credential this repo can reach, then see');
       lines.push('[the org security policy](https://github.com/ellum-developers/.github/blob/main/SECURITY.md).');
     }
+  }
+  if (coverage.length) {
+    lines.push(`\n### ⚠️ Scan coverage — ${coverage.length} warning(s)\n`);
+    for (const c of coverage) lines.push(`- \`${c.rule}\`: ${c.detail}`);
   }
   try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); } catch {}
 }
