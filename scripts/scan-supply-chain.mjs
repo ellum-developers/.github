@@ -199,12 +199,26 @@ function scanFile(rel) {
       'stashes require/module on global — dropper bootstrap pattern');
   }
 
-  /* R4 — hidden-payload padding */
-  const pad = content.match(/(\t{16,}|[ ]{200,})(?=\S)/);
-  if (pad) {
+  /*
+   * R4 — hidden-payload padding
+   *
+   * The padding alone is not the signal. Deeply nested JSX legitimately reaches
+   * 16 tabs and a markdown table pads columns past 200 spaces — both fired on
+   * this org's own repositories, and a guard that cries wolf gets ignored.
+   * What is never innocent is padding followed by a *large* amount of code:
+   * the dropper puts ~32KB after the tabs, indentation is followed by a few
+   * dozen characters.
+   */
+  const MIN_HIDDEN_PAYLOAD = 500;
+  for (const pad of content.matchAll(/(\t{16,}|[ ]{200,})(?=\S)/g)) {
+    const lineEnd = content.indexOf('\n', pad.index);
+    const after = (lineEnd === -1 ? content.length : lineEnd) - (pad.index + pad[1].length);
+    if (after < MIN_HIDDEN_PAYLOAD) continue;
     const kind = pad[1][0] === '\t' ? `${pad[1].length} tabs` : `${pad[1].length} spaces`;
     add('critical', 'hidden-payload-padding', rel,
-      `${kind} of padding before code — used to push a payload off-screen`);
+      `${kind} of padding followed by ${after} characters of code — ` +
+      'used to push a payload off-screen');
+    break;
   }
 
   /* R6 — Ethereum RPC C2 */
