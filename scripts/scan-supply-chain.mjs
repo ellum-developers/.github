@@ -118,7 +118,7 @@ function listFiles() {
     note('file-list-fallback',
       `git ls-files failed (${oneLine(err, 'unknown error')}); ` +
       'listing files with a directory walk instead. The walk includes untracked ' +
-      "files and skips hidden directories, so the checked set can differ from the " +
+      "files and skips most hidden directories, so the checked set can differ from the " +
       "repository's tracked files.");
     const acc = [];
     (function walk(dir) {
@@ -129,7 +129,7 @@ function listFiles() {
         return;
       }
       for (const e of entries) {
-        if (e.name.startsWith('.') && e.name !== '.github') continue;
+        if (e.name.startsWith('.') && e.name !== '.github' && e.name !== '.vscode') continue;
         if (SKIP_DIRS.has(e.name)) continue;
         const full = join(dir, e.name);
         if (e.isDirectory()) walk(full);
@@ -278,6 +278,32 @@ function scanFile(rel) {
           `line ${i + 1} is ${line.length} chars — configs are not minified`);
         break;
       }
+    }
+  }
+
+  /*
+   * R11/R12 — VS Code auto-run loader ("folder-open" dropper)
+   *
+   * The next stage of this campaign is an editor task that executes a file the
+   * moment a developer opens the repository — no build, no install, no command
+   * typed — with the Workspace Trust prompt pre-approved in settings.json so
+   * nothing asks first. The command in the wild runs a `.woff2`-named script
+   * under public/fonts, so an auto-run task pointing `node` at a tracked file is
+   * the loader even before the stage-two file lands. Both keys are set
+   * deliberately and rarely in a shared repository; ellumAI_backend's
+   * pre-commit hook already blocks them, and this brings the same checks to
+   * every repository the reusable guard covers.
+   */
+  if (parts.includes('.vscode') && ext === '.json') {
+    if (/"runOn"\s*:\s*"folderOpen"/.test(content)) {
+      add('high', 'vscode-folder-open-task', rel,
+        'defines a task VS Code runs automatically when the folder is opened — ' +
+        'the folder-open dropper loader');
+    }
+    if (/"task\.allowAutomaticTasks"\s*:\s*true/.test(content)) {
+      add('high', 'vscode-auto-tasks-trusted', rel,
+        'sets task.allowAutomaticTasks: true — pre-approves auto-run tasks and ' +
+        'skips the Workspace Trust prompt');
     }
   }
 
