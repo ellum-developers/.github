@@ -57,6 +57,8 @@ rather than a server — so there is no domain to block and no host to take down
 | `unused-createRequire` | high | `createRequire()` added to an ESM config that never calls `require` |
 | `long-line-in-config` | high | A config line over 1000 characters — configs are not minified |
 | `risky-install-hook` | high | `pre`/`post`install scripts that fetch or `eval` code |
+| `vscode-folder-open-task` | high | A `.vscode` task set to run automatically on folder open |
+| `vscode-auto-tasks-trusted` | high | `task.allowAutomaticTasks: true` — pre-approves auto-run tasks |
 | `eth-rpc-endpoint` | medium | A public Ethereum RPC endpoint in source |
 
 ### Why these signals
@@ -68,6 +70,11 @@ an apparently normal file and a diff shows one changed line. Structural rules
 (`hidden-payload-padding`, `masqueraded-asset`, `long-line-in-config`) therefore
 matter more than the indicator lists: they still fire when the wallet address
 and constants change.
+
+The same payload family also arms an editor loader: a `.vscode` task that runs
+on folder open, with `task.allowAutomaticTasks` set so nothing prompts first.
+The guard flags both keys in every repository, matching the pre-commit hook
+that only `ellumAI_backend` runs today.
 
 ### Suppressing a false positive
 
