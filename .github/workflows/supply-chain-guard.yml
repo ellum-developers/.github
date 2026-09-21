@@ -1,12 +1,15 @@
 # Reusable supply-chain guard for every Ellum AI repository.
 #
 # Callers add a four-line workflow (see workflow-templates/supply-chain-guard.yml)
-# so the detection logic lives in exactly one place and updates reach every repo
-# at once.
+# so the detection logic lives in exactly one place.
+#
+# Pin the caller to a full commit SHA of this workflow, never a moving branch or
+# tag, so a later commit cannot silently change the rules a repository is judged
+# by:
 #
 #   jobs:
 #     guard:
-#       uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+#       uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@<sha>
 
 name: Supply-chain guard (reusable)
 
@@ -18,11 +21,6 @@ on:
         type: string
         required: false
         default: ''
-      guard-ref:
-        description: 'Ref of ellum-developers/.github to take the scanner from.'
-        type: string
-        required: false
-        default: 'main'
 
 permissions:
   contents: read
@@ -39,13 +37,21 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # Kept in its own directory so the scanner never scans itself, and so a
-      # repo cannot silently weaken the rules it is checked against.
+      # Kept in its own directory so the scanner never scans itself.
+      #
+      # The scanner is read from the exact commit of this workflow file, not
+      # from a branch: job.workflow_repository and job.workflow_sha identify the
+      # workflow that defines this job. A caller pinned to a commit therefore
+      # runs a fixed workflow and the scanner that shipped with it, and a later
+      # write to a branch cannot swap the rules underneath it. Reading the
+      # scanner from a branch (the previous default) let it drift apart from the
+      # workflow that runs it, and let a caller point it at an arbitrary older
+      # ref.
       - name: Check out the scanner
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          repository: ellum-developers/.github
-          ref: ${{ inputs.guard-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .supply-chain-guard
           persist-credentials: false
 

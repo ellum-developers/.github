@@ -28,8 +28,15 @@ permissions:
   contents: read
 jobs:
   guard:
-    uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+    uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@<FULL_COMMIT_SHA>
 ```
+
+Pin the `uses:` ref to a full commit SHA of the reusable workflow, never a
+branch. The guard reads its scanner from the same commit as the workflow
+(`job.workflow_sha`), so a pinned ref fixes both the rules and the scanner that
+runs them. A repository that tracks `@main` is judged by whatever is on that
+branch at run time, so one commit there changes the rules for every repository
+at once, with no review, no pinning, and nothing to notice it.
 
 ### What it looks for
 
