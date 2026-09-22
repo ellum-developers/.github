@@ -19,3 +19,8 @@ concurrency:
 jobs:
   guard:
     uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+    # Passes the Slack incoming-webhook URL so a failed scan alerts a human.
+    # Add the secret on the repository (or organization); if it is absent the
+    # guard still fails the run, it just cannot notify.
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

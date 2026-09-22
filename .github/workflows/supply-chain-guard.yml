@@ -1,12 +1,20 @@
 # Reusable supply-chain guard for every Ellum AI repository.
 #
-# Callers add a four-line workflow (see workflow-templates/supply-chain-guard.yml)
+# Callers add a short workflow (see workflow-templates/supply-chain-guard.yml)
 # so the detection logic lives in exactly one place and updates reach every repo
 # at once.
 #
 #   jobs:
 #     guard:
 #       uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+#       secrets:
+#         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#
+# A failed scan is otherwise silent: the calling run turns red and nothing tells
+# a human, so a rejected release simply does not happen. When the caller passes
+# SLACK_WEBHOOK_URL the guard posts the failure to Slack too. Without it the
+# failure still fails the caller's run; the notification is skipped with a
+# warning.
 
 name: Supply-chain guard (reusable)
 
@@ -23,6 +31,10 @@ on:
         type: string
         required: false
         default: 'main'
+    secrets:
+      SLACK_WEBHOOK_URL:
+        description: 'Slack incoming-webhook URL that a failed scan posts to.'
+        required: false
 
 permissions:
   contents: read
@@ -51,3 +63,34 @@ jobs:
 
       - name: Scan the working tree
         run: node .supply-chain-guard/scripts/scan-supply-chain.mjs "$GITHUB_WORKSPACE"
+
+  # Runs only when the scan fails, in a job that never checks out the scanned
+  # tree, so the webhook credential is not exposed to the repository under
+  # review.
+  notify:
+    name: Alert on guard failure
+    needs: scan
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post the failure to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SCANNED_REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL is not set, so this guard failure was not posted to Slack. Set the secret on the calling repository or organization and pass it to this workflow (see workflow-templates/supply-chain-guard.yml)."
+            exit 0
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="$(jq -n \
+            --arg repo "${GITHUB_REPOSITORY}" \
+            --arg ref "${SCANNED_REF}" \
+            --arg url "${run_url}" \
+            '{text: (":rotating_light: Supply-chain guard failed on `" + $repo + "` (`" + $ref + "`) — a release may be blocked. " + $url)}')"
+
+          curl -fsS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+          echo "Posted the guard failure to Slack."

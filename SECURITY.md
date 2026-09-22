@@ -29,7 +29,17 @@ permissions:
 jobs:
   guard:
     uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+### Seeing a failure
+
+A guard failure fails the calling run, but on its own nobody is told: the run
+turns red and the release simply does not happen. Set a `SLACK_WEBHOOK_URL`
+secret (repository or organization) and pass it as above, and every failed scan
+posts its repository, ref and run URL to Slack. Without the secret the run still
+fails; the notification is skipped with a warning.
 
 ### What it looks for
 
