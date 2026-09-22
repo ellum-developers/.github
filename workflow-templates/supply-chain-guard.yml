@@ -18,4 +18,8 @@ concurrency:
 
 jobs:
   guard:
-    uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@main
+    # Pin to a full commit SHA of the reusable workflow — never a branch or a
+    # moving tag. The guard reads its scanner from that same commit, so a pinned
+    # ref fixes both the rules and the runner. Replace the placeholder with the
+    # current SHA from https://github.com/ellum-developers/.github/commits/main
+    uses: ellum-developers/.github/.github/workflows/supply-chain-guard.yml@<FULL_COMMIT_SHA>
