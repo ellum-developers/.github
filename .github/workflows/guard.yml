@@ -1,0 +1,33 @@
+name: Supply-chain guard
+
+# This repository holds the org-wide reusable guard
+# (.github/workflows/supply-chain-guard.yml) but never invoked it on itself: a
+# reusable workflow only runs when a caller calls it, and there was no caller
+# here. The default-branch ruleset requires the status check
+# "guard / Dropper / EtherHiding scan", so the required context was never
+# reported and every pull request in this repository stayed blocked. This is
+# that caller; its job id ("guard") forms the context name together with the
+# reusable workflow's own job name.
+#
+# The relative `uses` below runs the guard at the commit under review, so a
+# change to the guard itself is judged by the guard it ships with.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily, so a payload committed to a quiet repository still surfaces within a day.
+    - cron: '19 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    uses: ./.github/workflows/supply-chain-guard.yml
